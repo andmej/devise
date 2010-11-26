@@ -149,6 +149,16 @@ Finally, you need to set up default url options for the mailer in each environme
 
   config.action_mailer.default_url_options = { :host => 'localhost:3000' }
 
+Notice that if your devise model is not called "user" but "member", then the helpers you should use are:
+
+  before_filter :authenticate_member!
+
+  member_signed_in?
+
+  current_member
+
+  member_session
+
 === Configuring Models
 
 The devise method in your models also accepts some options to configure its modules. For example, you can choose which encryptor to use in database_authenticatable:
