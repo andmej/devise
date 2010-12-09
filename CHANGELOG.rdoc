@@ -1,4 +1,9 @@
 * deprecations
+  * Deprecated anybody_signed_in? in favor of signed_in? (by github.com/gavinhughes)
+
+== 1.2.rc
+
+* deprecations
   * cookie_domain is deprecated in favor of cookie_options
   * after_update_path_for can no longer be defined in ApplicationController
 
