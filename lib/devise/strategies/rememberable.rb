@@ -9,6 +9,7 @@ module Devise
     class Rememberable < Authenticatable
       # A valid strategy for rememberable needs a remember token in the cookies.
       def valid?
+        @remember_cookie = nil
         remember_cookie.present?
       end
 
@@ -20,13 +21,18 @@ module Devise
 
         if validate(resource)
           success!(resource)
-        else
+        elsif !halted?
           cookies.delete(remember_key)
           pass
         end
       end
 
     private
+
+      def decorate(resource)
+        super
+        resource.extend_remember_period = mapping.to.extend_remember_period if resource.respond_to?(:extend_remember_period=)
+      end
 
       def remember_me?
         true
@@ -36,14 +42,10 @@ module Devise
         "remember_#{scope}_token"
       end
 
-      def extend_remember_period?
-        mapping.to.extend_remember_period
-      end
-
-      # Accessor for remember cookie
       def remember_cookie
         @remember_cookie ||= cookies.signed[remember_key]
       end
+
     end
   end
 end

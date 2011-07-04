@@ -6,6 +6,7 @@ module Devise
     module InternalHelpers #:nodoc:
       extend ActiveSupport::Concern
       include Devise::Controllers::ScopedViews
+      include Devise::Controllers::SharedHelpers
 
       included do
         helper DeviseHelper
@@ -16,16 +17,12 @@ module Devise
         helper_method *helpers
 
         prepend_before_filter :is_devise_resource?
-        respond_to :all if mimes_for_respond_to.empty?
-
-        Devise.routes_prepare do
-          skip_before_filter *Devise.mappings.keys.map { |m| :"authenticate_#{m}!" }
-        end
+        respond_to *Mime::SET.map(&:to_sym) if mimes_for_respond_to.empty?
       end
 
       # Gets the actual resource stored in the instance variable
       def resource
-        instance_variable_get("@#{resource_name}")
+        instance_variable_get(:"@#{resource_name}")
       end
 
       # Proxy to devise map name
@@ -58,12 +55,19 @@ module Devise
 
       # Checks whether it's a devise mapped resource or not.
       def is_devise_resource? #:nodoc:
-        unknown_action!("Could not find devise mapping for path #{request.fullpath.inspect}") unless devise_mapping
+        unknown_action! <<-MESSAGE unless devise_mapping
+Could not find devise mapping for path #{request.fullpath.inspect}.
+Maybe you forgot to wrap your route inside the scope block? For example:
+
+    devise_scope :user do
+      match "/some/route" => "some_devise_controller"
+    end
+MESSAGE
       end
 
-      # Check whether it's navigational format, such as :html or :iphone, or not.
-      def is_navigational_format?
-        Devise.navigational_formats.include?(request.format.to_sym)
+      # Returns real navigational formats which are supported by Rails
+      def navigational_formats
+        @navigational_formats ||= Devise.navigational_formats.select{ |format| Mime::EXTENSION_LOOKUP[format.to_s] }
       end
 
       def unknown_action!(msg)
@@ -87,9 +91,24 @@ module Devise
       # Example:
       #   before_filter :require_no_authentication, :only => :new
       def require_no_authentication
-        if warden.authenticated?(resource_name)
+        no_input = devise_mapping.no_input_strategies
+        args = no_input.dup.push :scope => resource_name
+        if no_input.present? && warden.authenticate?(*args)
           resource = warden.user(resource_name)
+          flash[:alert] = I18n.t("devise.failure.already_authenticated")
           redirect_to after_sign_in_path_for(resource)
+        end
+      end
+
+      # Helper for use to validate if an resource is errorless. If we are on paranoid mode, we always should assume it is
+      # and return false.
+      def successful_and_sane?(resource)
+        if Devise.paranoid
+          set_flash_message :notice, :send_paranoid_instructions if is_navigational_format?
+          resource.errors.clear
+          false
+        else
+          resource.errors.empty?
         end
       end
 
@@ -117,6 +136,12 @@ module Devise
 
       def clean_up_passwords(object) #:nodoc:
         object.clean_up_passwords if object.respond_to?(:clean_up_passwords)
+      end
+
+      def respond_with_navigational(*args, &block)
+        respond_with(*args) do |format|
+          format.any(*navigational_formats, &block)
+        end
       end
     end
   end

@@ -30,12 +30,24 @@ class RememberMeTest < ActionController::IntegrationTest
   def cookie_expires(key)
     cookie  = response.headers["Set-Cookie"].split("\n").grep(/^#{key}/).first
     expires = cookie.split(";").map(&:strip).grep(/^expires=/).first
-    Time.parse(expires)
+    Time.parse(expires).utc
   end
 
   test 'do not remember the user if he has not checked remember me option' do
     user = sign_in_as_user
     assert_nil request.cookies["remember_user_cookie"]
+  end
+
+  test 'handles unverified requests gets rid of caches' do
+    swap UsersController, :allow_forgery_protection => true do
+      post exhibit_user_url(1)
+      assert_not warden.authenticated?(:user)
+
+      create_user_and_remember
+      post exhibit_user_url(1)
+      assert_equal "User is not authenticated", response.body
+      assert_not warden.authenticated?(:user)
+    end
   end
 
   test 'generate remember token after sign in' do
@@ -69,7 +81,24 @@ class RememberMeTest < ActionController::IntegrationTest
     assert_response :success
     assert warden.authenticated?(:user)
     assert warden.user(:user) == user
-    assert_match /remember_user_token[^\n]*HttpOnly\n/, response.headers["Set-Cookie"], "Expected Set-Cookie header in response to set HttpOnly flag on remember_user_token cookie."
+    assert_match /remember_user_token[^\n]*HttpOnly/, response.headers["Set-Cookie"], "Expected Set-Cookie header in response to set HttpOnly flag on remember_user_token cookie."
+  end
+
+  test 'remember the user before sign up and redirect him to his home' do
+    user = create_user_and_remember
+    get new_user_registration_path
+    assert warden.authenticated?(:user)
+    assert_redirected_to root_path
+  end
+
+  test 'cookies are destroyed on unverified requests' do
+    swap ApplicationController, :allow_forgery_protection => true do
+      user = create_user_and_remember
+      get users_path
+      assert warden.authenticated?(:user)
+      post root_path, :authenticity_token => 'INVALID'
+      assert_not warden.authenticated?(:user)
+    end
   end
 
   test 'does not extend remember period through sign in' do
@@ -151,7 +180,6 @@ class RememberMeTest < ActionController::IntegrationTest
 
     get users_path
     assert_not warden.authenticated?(:user)
-    assert_nil warden.cookies['remember_user_token']
   end
 
   test 'do not remember the admin anymore after forget' do
@@ -161,11 +189,11 @@ class RememberMeTest < ActionController::IntegrationTest
 
     get destroy_admin_session_path
     assert_not warden.authenticated?(:admin)
+    assert_nil admin.reload.remember_token
     assert_nil warden.cookies['remember_admin_token']
 
     get root_path
     assert_not warden.authenticated?(:admin)
-    assert_nil warden.cookies['remember_admin_token']
   end
 
   test 'changing user password expires remember me token' do

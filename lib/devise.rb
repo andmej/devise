@@ -1,7 +1,9 @@
+require 'rails'
 require 'active_support/core_ext/numeric/time'
 require 'active_support/dependencies'
 require 'orm_adapter'
 require 'set'
+require 'securerandom'
 
 module Devise
   autoload :FailureApp, 'devise/failure_app'
@@ -9,11 +11,14 @@ module Devise
   autoload :PathChecker, 'devise/path_checker'
   autoload :Schema, 'devise/schema'
   autoload :TestHelpers, 'devise/test_helpers'
+  autoload :Email, 'devise/email'
 
   module Controllers
     autoload :Helpers, 'devise/controllers/helpers'
     autoload :InternalHelpers, 'devise/controllers/internal_helpers'
+    autoload :Rememberable, 'devise/controllers/rememberable'
     autoload :ScopedViews, 'devise/controllers/scoped_views'
+    autoload :SharedHelpers, 'devise/controllers/shared_helpers'
     autoload :UrlHelpers, 'devise/controllers/url_helpers'
   end
 
@@ -24,6 +29,10 @@ module Devise
     autoload :RestfulAuthenticationSha1, 'devise/encryptors/restful_authentication_sha1'
     autoload :Sha512, 'devise/encryptors/sha512'
     autoload :Sha1, 'devise/encryptors/sha1'
+  end
+
+  module Mailers
+    autoload :Helpers, 'devise/mailers/helpers'
   end
 
   module Strategies
@@ -38,6 +47,9 @@ module Devise
   ROUTES      = ActiveSupport::OrderedHash.new
   STRATEGIES  = ActiveSupport::OrderedHash.new
   URL_HELPERS = ActiveSupport::OrderedHash.new
+
+  # Strategies that do not require user input.
+  NO_INPUT = []
 
   # True values used to check params
   TRUE_VALUES = [true, 1, '1', 't', 'T', 'true', 'TRUE']
@@ -68,8 +80,14 @@ module Devise
   @@request_keys = []
 
   # Keys that should be case-insensitive.
+  # False by default for backwards compatibility.
   mattr_accessor :case_insensitive_keys
-  @@case_insensitive_keys = [ :email ]
+  @@case_insensitive_keys = false
+  
+  # Keys that should have whitespace stripped.
+  # False by default for backwards compatibility.
+  mattr_accessor :strip_whitespace_keys
+  @@strip_whitespace_keys = false
 
   # If http authentication is enabled by default.
   mattr_accessor :http_authenticatable
@@ -87,13 +105,15 @@ module Devise
   mattr_accessor :http_authentication_realm
   @@http_authentication_realm = "Application"
 
-  # Email regex used to validate email formats. Adapted from authlogic.
+  # Email regex used to validate email formats. Based on RFC 822 and
+  # retrieved from Sixarm email validation gem
+  # (https://github.com/SixArm/sixarm_ruby_email_address_validation).
   mattr_accessor :email_regexp
-  @@email_regexp = /\A([\w\.%\+\-]+)@([\w\-]+\.)+([\w]{2,})\z/i
+  @@email_regexp = Devise::Email::EXACT_PATTERN
 
   # Range validation for password length
   mattr_accessor :password_length
-  @@password_length = 6..20
+  @@password_length = 6..128
 
   # The time the user will be remembered without asking for credentials again.
   mattr_accessor :remember_for
@@ -115,6 +135,10 @@ module Devise
   # Time interval you can access your account before confirming your account.
   mattr_accessor :confirm_within
   @@confirm_within = 0.days
+
+  # Defines which key will be used when confirming an account
+  mattr_accessor :confirmation_keys
+  @@confirmation_keys = [ :email ]
 
   # Time interval to timeout the user session without activity.
   mattr_accessor :timeout_in
@@ -164,6 +188,10 @@ module Devise
   mattr_accessor :reset_password_keys
   @@reset_password_keys = [ :email ]
 
+  # Time interval you can reset your password with a reset password key
+  mattr_accessor :reset_password_within
+  @@reset_password_within = nil
+
   # The default scope which is used by warden.
   mattr_accessor :default_scope
   @@default_scope = nil
@@ -181,10 +209,11 @@ module Devise
   @@stateless_token = false
 
   # Which formats should be treated as navigational.
+  # We need both :"*/*" and "*/*" to work on different Rails versions.
   mattr_accessor :navigational_formats
-  @@navigational_formats = [:"*/*", :html]
+  @@navigational_formats = [:"*/*", "*/*", :html]
 
-  # When set to true, signing out an user signs out all other scopes.
+  # When set to true, signing out a user signs out all other scopes.
   mattr_accessor :sign_out_all_scopes
   @@sign_out_all_scopes = true
 
@@ -212,10 +241,9 @@ module Devise
   @@warden_config = nil
   @@warden_config_block = nil
 
-  # Store whether the route file was already loaded.
-  mattr_accessor :routes_loaded
-  @@routes_loaded = false
-  @@routes_prepare = []
+  # When true, enter in paranoid mode to avoid user enumeration.
+  mattr_accessor :paranoid
+  @@paranoid = false
 
   # Default way to setup Devise. Run rails generate devise_install to create
   # a fresh initializer with all configuration values.
@@ -223,14 +251,27 @@ module Devise
     yield self
   end
 
-  def self.omniauth_providers
-    omniauth_configs.keys
+  class Getter
+    def initialize name
+      @name = name
+    end
+
+    def get
+      ActiveSupport::Dependencies.constantize(@name)
+    end
   end
 
-  def self.cookie_domain=(value)
-    ActiveSupport::Deprecation.warn "Devise.cookie_domain=(value) is deprecated. "
-      "Please use Devise.cookie_options = { :domain => value } instead."
-    self.cookie_options[:domain] = value
+  def self.ref(arg)
+    if defined?(ActiveSupport::Dependencies::ClassCache)
+      ActiveSupport::Dependencies::reference(arg)
+      Getter.new(arg)
+    else
+      ActiveSupport::Dependencies.ref(arg)
+    end
+  end
+
+  def self.omniauth_providers
+    omniauth_configs.keys
   end
 
   # Get the mailer class from the mailer reference object.
@@ -240,7 +281,7 @@ module Devise
 
   # Set the mailer reference object to access the mailer.
   def self.mailer=(class_name)
-    @@mailer_ref = ActiveSupport::Dependencies.ref(class_name)
+    @@mailer_ref = ref(class_name)
   end
   self.mailer = "Devise::Mailer"
 
@@ -276,12 +317,16 @@ module Devise
     options.assert_valid_keys(:strategy, :model, :controller, :route)
 
     if strategy = options[:strategy]
-      STRATEGIES[module_name] = (strategy == true ? module_name : strategy)
+      strategy = (strategy == true ? module_name : strategy)
+      STRATEGIES[module_name] = strategy
     end
 
     if controller = options[:controller]
-      CONTROLLERS[module_name] = (controller == true ? module_name : controller)
+      controller = (controller == true ? module_name : controller)
+      CONTROLLERS[module_name] = controller
     end
+
+    NO_INPUT << strategy if strategy && controller != :sessions
 
     if route = options[:route]
       case route
@@ -304,7 +349,8 @@ module Devise
 
     if options[:model]
       path = (options[:model] == true ? "devise/models/#{module_name}" : options[:model])
-      Devise::Models.send(:autoload, module_name.to_s.camelize.to_sym, path)
+      camelized = ActiveSupport::Inflector.camelize(module_name.to_s)
+      Devise::Models.send(:autoload, camelized.to_sym, path)
     end
 
     Devise::Mapping.add_module module_name
@@ -331,7 +377,8 @@ module Devise
   #
   def self.omniauth(provider, *args)
     @@helpers << Devise::OmniAuth::UrlHelpers
-    @@omniauth_configs[provider] = Devise::OmniAuth::Config.new(provider, args)
+    config = Devise::OmniAuth::Config.new(provider, args)
+    @@omniauth_configs[config.strategy_name.to_sym] = config
   end
 
   # Include helpers in the given scope to AC and AV.
@@ -370,26 +417,17 @@ module Devise
 
   # Generate a friendly string randomically to be used as token.
   def self.friendly_token
-    ActiveSupport::SecureRandom.base64(44).tr('+/=', 'xyz')
+    SecureRandom.base64(15).tr('+/=', 'xyz')
   end
 
-  # Store a block to be executed only after the routes are loaded.
-  # Required on config.cache_classes environment as a class may be
-  # loaded to early and then some configuration wouldn't apply.
-  def self.routes_prepare
-    if Rails.application.config.cache_classes || !routes_loaded
-      @@routes_prepare << Proc.new
-    else
-      yield
-    end
-  end
+  # constant-time comparison algorithm to prevent timing attacks
+  def self.secure_compare(a, b)
+    return false if a.blank? || b.blank? || a.bytesize != b.bytesize
+    l = a.unpack "C#{a.bytesize}"
 
-  # Invoke the stored routes prepare blocks and set routes_loaded to true.
-  def self.call_routes_prepare!
-    while block = @@routes_prepare.shift
-      block.call
-    end
-    @routes_loaded = true
+    res = 0
+    b.each_byte { |byte| res |= byte ^ l.shift }
+    res == 0
   end
 end
 

@@ -6,14 +6,14 @@
 Warden::Manager.after_set_user do |record, warden, options|
   scope = options[:scope]
 
-  if record && record.respond_to?(:timedout?) && warden.authenticated?(scope)
+  if record && record.respond_to?(:timedout?) && warden.authenticated?(scope) && options[:store] != false
     last_request_at = warden.session(scope)['last_request_at']
 
     if record.timedout?(last_request_at)
       path_checker = Devise::PathChecker.new(warden.env, scope)
       unless path_checker.signing_out?
         warden.logout(scope)
-        throw :warden, options.merge(:message => :timeout)
+        throw :warden, :scope => scope, :message => :timeout
       end
     end
 

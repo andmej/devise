@@ -9,7 +9,7 @@ Devise is a flexible authentication solution for Rails based on Warden. It:
 
 It's composed of 12 modules:
 
-* Database Authenticatable: encrypts and stores a password in the database to validate the authenticity of an user while signing in. The authentication can be done both through POST requests or HTTP Basic Authentication.
+* Database Authenticatable: encrypts and stores a password in the database to validate the authenticity of a user while signing in. The authentication can be done both through POST requests or HTTP Basic Authentication.
 * Token Authenticatable: signs in a user based on an authentication token (also known as "single access token"). The token can be given both through query string or HTTP Basic Authentication.
 * Omniauthable: adds Omniauth (github.com/intridea/omniauth) support;
 * Confirmable: sends emails with confirmation instructions and verifies whether an account is already confirmed during sign in.
@@ -24,7 +24,7 @@ It's composed of 12 modules:
 
 == Information
 
-=== The Devise Wiki
+=== The Devise wiki
 
 The Devise Wiki has lots of additional information about Devise including many "how-to" articles and answers to the most frequently asked questions. Please browse the Wiki after finishing this README:
 
@@ -36,11 +36,11 @@ If you discover a problem with Devise, we would like to know about it. However, 
 
 http://github.com/plataformatec/devise/wiki/Bug-reports
 
-If you found a security bug, do *NOT* use the GitHub Issue tracker. Send private GitHub message or email to the maintainers listed in the bottom of the README.
+If you found a security bug, do *NOT* use the GitHub issue tracker. Send email or a private GitHub message to the maintainers listed at the bottom of the README.
 
-=== Google Group
+=== Mailing list
 
-If you have any questions, comments, or concerns please use the Google Group instead of the GitHub Issues tracker:
+If you have any questions, comments, or concerns, please use the Google Group instead of the GitHub issue tracker:
 
 http://groups.google.com/group/plataformatec-devise
 
@@ -52,7 +52,7 @@ http://rubydoc.info/github/plataformatec/devise/master/frames
 
 If you need to use Devise with Rails 2.3, you can always run `gem server` from the command line after you install the gem to access the old documentation.
 
-=== Example Applications
+=== Example applications
 
 There are a few example applications available on GitHub that demonstrate various features of Devise with different versions of Rails. You can view them here:
 
@@ -70,6 +70,8 @@ We hope that you will consider contributing to Devise. Please read this short ov
 
 http://github.com/plataformatec/devise/wiki/Contributing
 
+You will usually want to write tests for your changes.  To run the test suite, `cd` into Devise's top-level directory and run `bundle install` and `rake`.  For the tests to pass, you will need to have a MongoDB server (version 1.6 or newer) running on your system.
+
 == Installation
 
 You can use the latest Rails 3 gem with the latest Devise gem:
@@ -84,9 +86,18 @@ The generator will install an initializer which describes ALL Devise's configura
 
   rails generate devise MODEL
 
-Replace MODEL by the class name you want to add devise, like User, Admin, etc. This will create a model (if one does not exist) and configure it with default Devise modules. The generator will also create a migration file (if your ORM support them) and configure your routes. Continue reading this file to understand exactly what the generator produces and how to use it.
+Replace MODEL by the class name used for the applications users, it's frequently 'User' but could also be 'Admin'. This will create a model (if one does not exist) and configure it with default Devise modules. Next, you'll usually run db:migrate as the generator will have created a migration file (if your ORM supports them). This generator also configures your config/routes.rb file, continue reading this file to understand exactly what the generator produces and how to use it.
 
 Support for Rails 2.3.x can be found by installing Devise 1.0.x from the v1.0 branch.
+
+== Starting with Rails?
+
+If you are building your first Rails application, we recommend you to *not* use Devise. Devise requires a good understanding of the Rails Framework. In such cases, we advise you to start a simple authentication system from scratch, today we have two resources:
+
+* Michael Hartl's online book: http://railstutorial.org/chapters/modeling-and-viewing-users-two#top
+* Ryan Bates' Railscast: http://railscasts.com/episodes/250-authentication-from-scratch
+
+Once you have solidified you understanding of Rails and authentication mechanisms, we assure you Devise will be very pleasant to work with. :)
 
 == Getting started
 
@@ -97,7 +108,7 @@ Devise must be set up within the model (or models) you want to use. Devise route
 We're assuming here you want a User model with some Devise modules, as outlined below:
 
   class User < ActiveRecord::Base
-    devise :database_authenticatable, :confirmable, :recoverable, :rememberable, :trackable, :validatable
+    devise :database_authenticatable, :registerable, :confirmable, :recoverable, :rememberable, :trackable, :validatable
   end
 
 After you choose which modules to use, you need to set up your migrations. Luckily, Devise has some helpers to save you from this boring work:
@@ -141,7 +152,7 @@ You can access the session for this scope:
 
 After signing in a user, confirming the account or updating the password, Devise will look for a scoped root path to redirect. Example: For a :user resource, it will use user_root_path if it exists, otherwise default root_path will be used. This means that you need to set the root inside your routes:
 
-  root :to => "home"
+  root :to => "home#index"
 
 You can also overwrite after_sign_in_path_for and after_sign_out_path_for to customize your redirect hooks.
 
@@ -163,7 +174,7 @@ Notice that if your devise model is not called "user" but "member", then the hel
 
 The devise method in your models also accepts some options to configure its modules. For example, you can choose which encryptor to use in database_authenticatable:
 
-  devise :database_authenticatable, :confirmable, :recoverable, :stretches => 20
+  devise :database_authenticatable, :registerable, :confirmable, :recoverable, :stretches => 20
 
 Besides :stretches, you can define :pepper, :encryptor, :confirm_within, :remember_for, :timeout_in, :unlock_in and other values. For details, see the initializer file that was created when you invoked the "devise:install" generator described above.
 
@@ -200,14 +211,6 @@ We built Devise to help you quickly develop an application that uses authenticat
 Since Devise is an engine, all its views are packaged inside the gem. These views will help you get started, but after sometime you may want to change them. If this is the case, you just need to invoke the following generator, and it will copy all views to your application:
 
   rails generate devise:views
-
-Devise currently supports generating views for the following template engines (use the `-e` flag for the devise:views generator):
-
-* Erb
-* Haml (http://github.com/nex3/haml)
-* Slim (http://github.com/stonean/slim)
-
-Note: If you are generating Haml or Slim templates, you will need to have a few dependencies such as `hpricot` (for both Haml and Slim) and `haml2slim` (for Slim) installed.
 
 If you have more than one role in your application (such as "User" and "Admin"), you will notice that Devise uses the same views for all roles. Fortunately, Devise offers an easy way to customize views. All you need to do is set "config.scoped_views = true" inside "config/initializers/devise.rb".
 
@@ -256,7 +259,7 @@ Feel free to choose the one you prefer!
 
 === I18n
 
-Devise uses flash messages with I18n with the flash keys :success and :failure. To customize your app, you can set up your locale file:
+Devise uses flash messages with I18n with the flash keys :notice and :alert. To customize your app, you can set up your locale file:
 
   en:
     devise:
@@ -312,12 +315,11 @@ If you're using RSpec and want the helpers automatically included within all +de
 
 Do not use such helpers for integration tests such as Cucumber or Webrat. Instead, fill in the form or explicitly set the user in session. For more tips, check the wiki (http://wiki.github.com/plataformatec/devise).
 
-=== OAuth2
+=== Omniauth
 
-Devise comes with OAuth support out of the box if you're using Devise from the git repository (for now). You can read more about OAuth2 support in the wiki:
+Devise comes with Omniauth support out of the box to authenticate from other providers. You can read more about Omniauth support in the wiki:
 
-* http://github.com/plataformatec/devise/wiki/OAuth2:-Overview
-* http://github.com/plataformatec/devise/wiki/OAuth2:-Testing
+* https://github.com/plataformatec/devise/wiki/OmniAuth:-Overview
 
 === Other ORMs
 

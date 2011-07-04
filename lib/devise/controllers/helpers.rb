@@ -5,7 +5,7 @@ module Devise
       extend ActiveSupport::Concern
 
       included do
-        helper_method :warden, :signed_in?, :devise_controller?, :anybody_signed_in?
+        helper_method :warden, :signed_in?, :devise_controller?
       end
 
       # Define authentication filters and accessor helpers based on mappings.
@@ -21,7 +21,7 @@ module Devise
       #   Generated methods:
       #     authenticate_user!  # Signs user in or redirect
       #     authenticate_admin! # Signs admin in or redirect
-      #     user_signed_in?     # Checks whether there is an user signed in or not
+      #     user_signed_in?     # Checks whether there is a user signed in or not
       #     admin_signed_in?    # Checks whether there is an admin signed in or not
       #     current_user        # Current signed in user
       #     current_admin       # Current signed in admin
@@ -36,8 +36,8 @@ module Devise
         mapping = mapping.name
 
         class_eval <<-METHODS, __FILE__, __LINE__ + 1
-          def authenticate_#{mapping}!
-            warden.authenticate!(:scope => :#{mapping})
+          def authenticate_#{mapping}!(force = false)
+            warden.authenticate!(:scope => :#{mapping}) if !devise_controller? || force
           end
 
           def #{mapping}_signed_in?
@@ -80,13 +80,7 @@ module Devise
         end
       end
 
-      def anybody_signed_in?
-        ActiveSupport::Deprecation.warn "Devise#anybody_signed_in? is deprecated. "
-          "Please use Devise#signed_in?(nil) instead."
-        signed_in?
-      end
-
-      # Sign in an user that already was authenticated. This helper is useful for logging
+      # Sign in a user that already was authenticated. This helper is useful for logging
       # users in after sign up.
       #
       # All options given to sign_in is passed forward to the set_user method in warden.
@@ -117,7 +111,7 @@ module Devise
         end
       end
 
-      # Sign out a given user or scope. This helper is useful for signing out an user
+      # Sign out a given user or scope. This helper is useful for signing out a user
       # after deleting accounts.
       #
       # Examples:
@@ -136,6 +130,7 @@ module Devise
       # Sign out all active users or scopes. This helper is useful for signing out all roles
       # in one click. This signs out ALL scopes in warden.
       def sign_out_all_scopes
+        Devise.mappings.keys.each { |s| warden.user(s) }
         warden.raw_session.inspect
         warden.logout
       end
@@ -184,7 +179,7 @@ module Devise
         respond_to?(home_path, true) ? send(home_path) : root_path
       end
 
-      # Method used by sessions controller to sign out an user. You can overwrite
+      # Method used by sessions controller to sign out a user. You can overwrite
       # it in your ApplicationController to provide a custom hook for a custom
       # scope. Notice that differently from +after_sign_in_path_for+ this method
       # receives a symbol with the scope, and not the resource.
@@ -194,7 +189,7 @@ module Devise
         root_path
       end
 
-      # Sign in an user and tries to redirect first to the stored location and
+      # Sign in a user and tries to redirect first to the stored location and
       # then to the url specified by after_sign_in_path_for. It accepts the same
       # parameters as the sign_in method.
       def sign_in_and_redirect(resource_or_scope, *args)
@@ -209,7 +204,7 @@ module Devise
         stored_location_for(scope) || after_sign_in_path_for(resource)
       end
 
-      # Sign out an user and tries to redirect to the url specified by
+      # Sign out a user and tries to redirect to the url specified by
       # after_sign_out_path_for.
       def sign_out_and_redirect(resource_or_scope)
         scope = Devise::Mapping.find_scope!(resource_or_scope)
@@ -221,6 +216,15 @@ module Devise
       # stored under "devise." namespace are removed after sign in.
       def expire_session_data_after_sign_in!
         session.keys.grep(/^devise\./).each { |k| session.delete(k) }
+      end
+
+      # Overwrite Rails' handle unverified request to sign out all scopes,
+      # clear run strategies and remove cached variables.
+      def handle_unverified_request
+        sign_out_all_scopes
+        warden.clear_strategies_cache!
+        Devise.mappings.each { |_,m| instance_variable_set("@current_#{m.name}", nil) }
+        super # call the default behaviour which resets the session
       end
     end
   end

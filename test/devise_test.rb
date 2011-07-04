@@ -58,8 +58,15 @@ class DeviseTest < ActiveSupport::TestCase
     assert_equal :fruits, Devise::CONTROLLERS[:kivi]
     Devise::ALL.delete(:kivi)
     Devise::CONTROLLERS.delete(:kivi)
-
-    assert_nothing_raised(Exception) { Devise.add_module(:authenticatable_again, :model => 'devise/model/authenticatable') }
-    assert defined?(Devise::Models::AuthenticatableAgain)
   end
+  
+  test 'should complain when comparing empty or different sized passes' do
+    [nil, ""].each do |empty|
+      assert_not Devise.secure_compare(empty, "something")
+      assert_not Devise.secure_compare("something", empty)
+      assert_not Devise.secure_compare(empty, empty)
+    end
+    assert_not Devise.secure_compare("size_1", "size_four")
+  end
+  
 end

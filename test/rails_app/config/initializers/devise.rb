@@ -15,9 +15,9 @@ Devise.setup do |config|
   require "devise/orm/#{DEVISE_ORM}"
 
   # ==> Configuration for any authentication mechanism
-  # Configure which keys are used when authenticating an user. By default is
+  # Configure which keys are used when authenticating a user. By default is
   # just :email. You can configure it to use [:username, :subdomain], so for
-  # authenticating an user, both parameters are required. Remember that those
+  # authenticating a user, both parameters are required. Remember that those
   # parameters are used only when authenticating and not when retrieving from
   # session. If you need permissions, you should implement that in a before filter.
   # You can also supply hash where the value is a boolean expliciting if authentication
@@ -30,6 +30,16 @@ Devise.setup do |config|
   # if you set :request_keys to [:subdomain], :subdomain will be used on authentication.
   # The same considerations mentioned for authentication_keys also apply to request_keys.
   # config.request_keys = []
+
+  # Configure which authentication keys should be case-insensitive.
+  # These keys will be downcased upon creating or modifying a user and when used
+  # to authenticate or find a user. Default is :email.
+  config.case_insensitive_keys = [ :email ]
+  
+  # Configure which authentication keys should have whitespace stripped.
+  # These keys will have whitespace before and after removed upon creating or
+  # modifying a user and when used to authenticate or find a user. Default is :email.
+  config.strip_whitespace_keys = [ :email ]
 
   # Tell if authentication through request.params is enabled. True by default.
   # config.params_authenticatable = true
@@ -57,6 +67,9 @@ Devise.setup do |config|
   # (ie 2 days).
   # config.confirm_within = 2.days
 
+  # Defines which key will be used when confirming an account
+  # config.confirmation_keys = [ :email ]
+
   # ==> Configuration for :rememberable
   # The time the user will be remembered without asking for credentials again.
   # config.remember_for = 2.weeks
@@ -72,8 +85,8 @@ Devise.setup do |config|
   config.use_salt_as_remember_token = true
 
   # ==> Configuration for :validatable
-  # Range for password length. Default is 6..20.
-  # config.password_length = 6..20
+  # Range for password length. Default is 6..128.
+  # config.password_length = 6..128
 
   # Regex to use to validate the email address
   # config.email_regexp = /^([\w\.%\+\-]+)@([\w\-]+\.)+([\w]{2,})$/i
@@ -110,6 +123,11 @@ Devise.setup do |config|
   #
   # Defines which key will be used when recovering the password for an account
   # config.reset_password_keys = [ :email ]
+
+  # Time interval you can reset your password with a reset password key.
+  # Don't put a too small interval or your users won't have the time to
+  # change their passwords.
+  config.reset_password_within = 2.hours
 
   # ==> Configuration for :encryptable
   # Allow you to use another encryption algorithm besides bcrypt (default). You can use
@@ -159,6 +177,7 @@ Devise.setup do |config|
   # ==> OmniAuth
   config.omniauth :facebook, 'APP_ID', 'APP_SECRET', :scope => 'email,offline_access'
   config.omniauth :open_id
+  config.omniauth :open_id, :name => 'google', :identifier => 'https://www.google.com/accounts/o8/id'
 
   # ==> Warden configuration
   # If you want to use other strategies, that are not supported by Devise, or

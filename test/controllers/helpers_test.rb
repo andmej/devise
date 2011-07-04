@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'ostruct'
 
-class ControllerAuthenticableTest < ActionController::TestCase
+class ControllerAuthenticatableTest < ActionController::TestCase
   tests ApplicationController
 
   def setup
@@ -136,11 +136,13 @@ class ControllerAuthenticableTest < ActionController::TestCase
   end
 
   test 'sign out without args proxy to sign out all scopes' do
+    @mock_warden.expects(:user).times(Devise.mappings.size)
     @mock_warden.expects(:logout).with().returns(true)
     @controller.sign_out
   end
 
   test 'sign out everybody proxy to logout on warden' do
+    @mock_warden.expects(:user).times(Devise.mappings.size)
     @mock_warden.expects(:logout).with().returns(true)
     @controller.sign_out_all_scopes
   end
@@ -224,6 +226,7 @@ class ControllerAuthenticableTest < ActionController::TestCase
 
   test 'sign out and redirect uses the configured after sign out path when signing out all scopes' do
     swap Devise, :sign_out_all_scopes => true do
+      @mock_warden.expects(:user).times(Devise.mappings.size)
       @mock_warden.expects(:logout).with().returns(true)
       @controller.expects(:redirect_to).with(admin_root_path)
       @controller.instance_eval "def after_sign_out_path_for(resource); admin_root_path; end"

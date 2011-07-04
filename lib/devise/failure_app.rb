@@ -10,6 +10,7 @@ module Devise
     include ActionController::UrlFor
     include ActionController::Redirecting
     include Rails.application.routes.url_helpers
+    include Devise::Controllers::SharedHelpers
 
     delegate :flash, :to => :request
 
@@ -64,7 +65,15 @@ module Devise
     end
 
     def redirect_url
-      send(:"new_#{scope}_session_path")
+      if skip_format?
+        send(:"new_#{scope}_session_path")
+      else
+        send(:"new_#{scope}_session_path", :format => request_format)
+      end
+    end
+
+    def skip_format?
+      %w(html */*).include? request_format.to_s
     end
 
     # Choose whether we should respond in a http authentication fashion,
@@ -79,7 +88,7 @@ module Devise
       if request.xhr?
         Devise.http_authenticatable_on_xhr
       else
-        !(request.format && Devise.navigational_formats.include?(request.format.to_sym))
+        !(request_format && is_navigational_format?)
       end
     end
 
@@ -90,14 +99,22 @@ module Devise
     end
 
     def http_auth_body
-      return i18n_message unless request.format
-      method = "to_#{request.format.to_sym}"
-      {}.respond_to?(method) ? { :error => i18n_message }.send(method) : i18n_message
+      return i18n_message unless request_format
+      method = "to_#{request_format}"
+      if method == "to_xml"
+        { :error => i18n_message }.to_xml(:root => "errors")
+      elsif {}.respond_to?(method)
+        { :error => i18n_message }.send(method)
+      else
+        i18n_message
+      end
     end
 
     def recall_app(app)
       controller, action = app.split("#")
-      "#{controller.camelize}Controller".constantize.action(action)
+      controller_name  = ActiveSupport::Inflector.camelize(controller)
+      controller_klass = ActiveSupport::Inflector.constantize("#{controller_name}Controller")
+      controller_klass.action(action)
     end
 
     def warden

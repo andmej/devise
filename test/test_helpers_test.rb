@@ -4,6 +4,12 @@ class TestHelpersTest < ActionController::TestCase
   tests UsersController
   include Devise::TestHelpers
 
+  class CustomFailureApp < Devise::FailureApp
+    def redirect
+      self.status = 306
+    end
+  end
+  
   test "redirects if attempting to access a page unauthenticated" do
     get :index
     assert_redirected_to new_user_session_path
@@ -13,7 +19,7 @@ class TestHelpersTest < ActionController::TestCase
   test "redirects if attempting to access a page with an unconfirmed account" do
     swap Devise, :confirm_within => 0 do
       user = create_user
-      assert !user.active?
+      assert !user.active_for_authentication?
 
       sign_in user
       get :index
@@ -24,7 +30,7 @@ class TestHelpersTest < ActionController::TestCase
   test "returns nil if accessing current_user with an unconfirmed account" do
     swap Devise, :confirm_within => 0 do
       user = create_user
-      assert !user.active?
+      assert !user.active_for_authentication?
 
       sign_in user
       get :accept, :id => user
@@ -51,6 +57,16 @@ class TestHelpersTest < ActionController::TestCase
     sign_out user
     get :index
     assert_redirected_to new_user_session_path
+  end
+  
+  test "respects custom failure app" do
+    begin
+      Devise.warden_config.failure_app = CustomFailureApp
+      get :index
+      assert_response 306
+    ensure
+      Devise.warden_config.failure_app = Devise::FailureApp
+    end
   end
 
   test "defined Warden after_authentication callback should not be called when sign_in is called" do

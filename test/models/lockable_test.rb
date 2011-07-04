@@ -47,15 +47,15 @@ class LockableTest < ActiveSupport::TestCase
     assert user.access_locked?
   end
 
-  test "active? should be the opposite of locked?" do
+  test "active_for_authentication? should be the opposite of locked?" do
     user = create_user
     user.confirm!
-    assert user.active?
+    assert user.active_for_authentication?
     user.lock_access!
-    assert_not user.active?
+    assert_not user.active_for_authentication?
   end
 
-  test "should unlock an user by cleaning locked_at, falied_attempts and unlock_token" do
+  test "should unlock a user by cleaning locked_at, falied_attempts and unlock_token" do
     user = create_user
     user.lock_access!
     assert_not_nil user.reload.locked_at
@@ -65,12 +65,6 @@ class LockableTest < ActiveSupport::TestCase
     assert_nil user.reload.locked_at
     assert_nil user.reload.unlock_token
     assert_equal 0, user.reload.failed_attempts
-  end
-
-  test 'should not unlock an unlocked user' do
-    user = create_user
-    assert_not user.unlock_access!
-    assert_match "was not locked", user.errors[:email].join
   end
 
   test "new user should not be locked and should have zero failed_attempts" do
@@ -141,7 +135,7 @@ class LockableTest < ActiveSupport::TestCase
     end
   end
 
-  test 'should find and unlock an user automatically' do
+  test 'should find and unlock a user automatically' do
     user = create_user
     user.lock_access!
     locked_user = User.unlock_access_by_token(user.unlock_token)
@@ -169,12 +163,12 @@ class LockableTest < ActiveSupport::TestCase
   end
 
   test 'should return a new user if no email was found' do
-    unlock_user = User.send_unlock_instructions(:email => "invalid@email.com")
+    unlock_user = User.send_unlock_instructions(:email => "invalid@example.com")
     assert_not unlock_user.persisted?
   end
 
   test 'should add error to new user email if no email was found' do
-    unlock_user = User.send_unlock_instructions(:email => "invalid@email.com")
+    unlock_user = User.send_unlock_instructions(:email => "invalid@example.com")
     assert_equal 'not found', unlock_user.errors[:email].join
   end
 
@@ -200,5 +194,32 @@ class LockableTest < ActiveSupport::TestCase
     assert_not user.resend_unlock_token
     assert_not user.access_locked?
     assert_equal 'was not locked', user.errors[:email].join
+  end
+
+  test 'should unlock account if lock has expired and increase attempts on failure' do
+    swap Devise, :unlock_in => 1.minute do
+      user = create_user
+      user.confirm!
+
+      user.failed_attempts = 2
+      user.locked_at = 2.minutes.ago
+
+      user.valid_for_authentication? { false }
+      assert_equal 1, user.failed_attempts
+    end
+  end
+
+  test 'should unlock account if lock has expired on success' do
+    swap Devise, :unlock_in => 1.minute do
+      user = create_user
+      user.confirm!
+
+      user.failed_attempts = 2
+      user.locked_at = 2.minutes.ago
+
+      user.valid_for_authentication? { true }
+      assert_equal 0, user.failed_attempts
+      assert_nil user.locked_at
+    end
   end
 end

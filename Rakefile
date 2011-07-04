@@ -1,18 +1,18 @@
 # encoding: UTF-8
 
-require 'rake'
 require 'rake/testtask'
-require 'rake/rdoctask'
-require File.join(File.dirname(__FILE__), 'lib', 'devise', 'version')
+require 'rdoc/task'
 
 desc 'Default: run tests for all ORMs.'
-task :default => :pre_commit
+task :default => :test
 
 desc 'Run Devise tests for all ORMs.'
 task :pre_commit do
   Dir[File.join(File.dirname(__FILE__), 'test', 'orm', '*.rb')].each do |file|
     orm = File.basename(file).split(".").first
-    system "rake test DEVISE_ORM=#{orm}"
+    # "Some day, my son, rake's inner wisdom will reveal itself.  Until then,
+    # take this `system` -- may its brute force protect you well."
+    exit 1 unless system "rake test DEVISE_ORM=#{orm}"
   end
 end
 

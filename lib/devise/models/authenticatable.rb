@@ -1,8 +1,9 @@
 require 'devise/hooks/activatable'
+require 'devise/models/serializable'
 
 module Devise
   module Models
-    # Authenticable module. Holds common settings for authentication.
+    # Authenticatable module. Holds common settings for authentication.
     #
     # == Options
     #
@@ -24,19 +25,19 @@ module Devise
     #   * +params_authenticatable+: if this model allows authentication through request params. By default true.
     #     It also accepts an array specifying the strategies that should allow params authentication.
     #
-    # == Active?
+    # == active_for_authentication?
     #
-    # Before authenticating an user and in each request, Devise checks if your model is active by
-    # calling model.active?. This method is overwriten by other devise modules. For instance,
-    # :confirmable overwrites .active? to only return true if your model was confirmed.
+    # Before authenticating a user and in each request, Devise checks if your model is active by
+    # calling model.active_for_authentication?. This method is overwriten by other devise modules. For instance,
+    # :confirmable overwrites .active_for_authentication? to only return true if your model was confirmed.
     #
     # You overwrite this method yourself, but if you do, don't forget to call super:
     #
-    #   def active?
+    #   def active_for_authentication?
     #     super && special_condition_is_valid?
     #   end
     #
-    # Whenever active? returns false, Devise asks the reason why your model is inactive using
+    # Whenever active_for_authentication? returns false, Devise asks the reason why your model is inactive using
     # the inactive_message method. You can overwrite it as well:
     #
     #   def inactive_message
@@ -45,6 +46,8 @@ module Devise
     #
     module Authenticatable
       extend ActiveSupport::Concern
+
+      include Devise::Models::Serializable
 
       included do
         class_attribute :devise_modules, :instance_writer => false
@@ -55,17 +58,17 @@ module Devise
       # find_for_authentication are the methods used in a Warden::Strategy to check
       # if a model should be signed in or not.
       #
-      # However, you should not overwrite this method, you should overwrite active? and
-      # inactive_message instead.
+      # However, you should not overwrite this method, you should overwrite active_for_authentication?
+      # and inactive_message instead.
       def valid_for_authentication?
-        if active?
+        if active_for_authentication?
           block_given? ? yield : true
         else
           inactive_message
         end
       end
 
-      def active?
+      def active_for_authentication?
         true
       end
 
@@ -77,7 +80,7 @@ module Devise
       end
 
       module ClassMethods
-        Devise::Models.config(self, :authentication_keys, :request_keys, :case_insensitive_keys, :http_authenticatable, :params_authenticatable)
+        Devise::Models.config(self, :authentication_keys, :request_keys, :strip_whitespace_keys, :case_insensitive_keys, :http_authenticatable, :params_authenticatable)
 
         def params_authenticatable?(strategy)
           params_authenticatable.is_a?(Array) ?
@@ -100,7 +103,9 @@ module Devise
         #   end
         #
         def find_for_authentication(conditions)
-          case_insensitive_keys.each { |k| conditions[k].try(:downcase!) }
+          conditions = filter_auth_params(conditions.dup)
+          (case_insensitive_keys || []).each { |k| conditions[k].try(:downcase!) }
+          (strip_whitespace_keys || []).each { |k| conditions[k].try(:strip!) }
           to_adapter.find_first(conditions)
         end
 
@@ -111,15 +116,16 @@ module Devise
 
         # Find an initialize a group of attributes based on a list of required attributes.
         def find_or_initialize_with_errors(required_attributes, attributes, error=:invalid) #:nodoc:
-          case_insensitive_keys.each { |k| attributes[k].try(:downcase!) }
-          
+          (case_insensitive_keys || []).each { |k| attributes[k].try(:downcase!) }
+          (strip_whitespace_keys || []).each { |k| attributes[k].try(:strip!) }
+
           attributes = attributes.slice(*required_attributes)
           attributes.delete_if { |key, value| value.blank? }
 
           if attributes.size == required_attributes.size
-            record = to_adapter.find_first(attributes)
+            record = to_adapter.find_first(filter_auth_params(attributes))
           end
-          
+
           unless record
             record = new
 
@@ -131,6 +137,20 @@ module Devise
           end
 
           record
+        end
+
+        protected
+
+        # Force keys to be string to avoid injection on mongoid related database.
+        def filter_auth_params(conditions)
+          conditions.each do |k, v|
+            conditions[k] = v.to_s if auth_param_requires_string_conversion?(v)
+          end if conditions.is_a?(Hash)
+        end
+        
+        # Determine which values should be transformed to string or passed as-is to the query builder underneath
+        def auth_param_requires_string_conversion?(value)
+          true unless value.is_a?(TrueClass) || value.is_a?(FalseClass) || value.is_a?(Fixnum)
         end
 
         # Generate a token by looping and ensuring does not already exist.

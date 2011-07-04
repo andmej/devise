@@ -22,7 +22,7 @@ module Devise
 
       delegate :lock_strategy_enabled?, :unlock_strategy_enabled?, :to => "self.class"
 
-      # Lock an user setting it's locked_at to actual time.
+      # Lock a user setting it's locked_at to actual time.
       def lock_access!
         self.locked_at = Time.now
 
@@ -34,14 +34,12 @@ module Devise
         save(:validate => false)
       end
 
-      # Unlock an user by cleaning locket_at and failed_attempts.
+      # Unlock a user by cleaning locket_at and failed_attempts.
       def unlock_access!
-        if_access_locked do
-          self.locked_at = nil
-          self.failed_attempts = 0 if respond_to?(:failed_attempts=)
-          self.unlock_token = nil  if respond_to?(:unlock_token=)
-          save(:validate => false)
-        end
+        self.locked_at = nil
+        self.failed_attempts = 0 if respond_to?(:failed_attempts=)
+        self.unlock_token = nil  if respond_to?(:unlock_token=)
+        save(:validate => false)
       end
 
       # Verifies whether a user is locked or not.
@@ -59,9 +57,9 @@ module Devise
         if_access_locked { send_unlock_instructions }
       end
 
-      # Overwrites active? from Devise::Models::Activatable for locking purposes
-      # by verifying whether an user is active to sign in or not based on locked?
-      def active?
+      # Overwrites active_for_authentication? from Devise::Models::Activatable for locking purposes
+      # by verifying whether a user is active to sign in or not based on locked?
+      def active_for_authentication?
         super && !access_locked?
       end
 
@@ -72,16 +70,21 @@ module Devise
       end
 
       # Overwrites valid_for_authentication? from Devise::Models::Authenticatable
-      # for verifying whether an user is allowed to sign in or not. If the user
+      # for verifying whether a user is allowed to sign in or not. If the user
       # is locked, it should never be allowed.
       def valid_for_authentication?
         return super unless persisted? && lock_strategy_enabled?(:failed_attempts)
+
+        # Unlock the user if the lock is expired, no matter
+        # if the user can login or not (wrong password, etc)
+        unlock_access! if lock_expired?
 
         case (result = super)
         when Symbol
           return result
         when TrueClass
           self.failed_attempts = 0
+          save(:validate => false)
         when FalseClass
           # PostgreSQL uses nil as the default value for integer columns set to 0
           self.failed_attempts ||= 0
@@ -89,10 +92,11 @@ module Devise
           if attempts_exceeded?
             lock_access!
             return :locked
+          else
+            save(:validate => false)
           end
         end
 
-        save(:validate => false) if changed?
         result
       end
 

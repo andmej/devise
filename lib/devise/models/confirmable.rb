@@ -55,11 +55,11 @@ module Devise
         unless_confirmed { send_confirmation_instructions }
       end
 
-      # Overwrites active? from Devise::Models::Activatable for confirmation
-      # by verifying whether an user is active to sign in or not. If the user
+      # Overwrites active_for_authentication? for confirmation
+      # by verifying whether a user is active to sign in or not. If the user
       # is already confirmed, it should never be blocked. Otherwise we need to
       # calculate if the confirm time has not expired for this user.
-      def active?
+      def active_for_authentication?
         super && (!confirmation_required? || confirmed? || confirmation_period_valid?)
       end
 
@@ -84,7 +84,7 @@ module Devise
         # Checks if the confirmation for the user is within the limit time.
         # We do this by calculating if the difference between today and the
         # confirmation sent date does not exceed the confirm in time configured.
-        # Confirm_in is a model configuration, must always be an integer value.
+        # Confirm_within is a model configuration, must always be an integer value.
         #
         # Example:
         #
@@ -133,7 +133,7 @@ module Devise
         # with an email not found error.
         # Options must contain the user email
         def send_confirmation_instructions(attributes={})
-          confirmable = find_or_initialize_with_error_by(:email, attributes[:email], :not_found)
+          confirmable = find_or_initialize_with_errors(confirmation_keys, attributes, :not_found)
           confirmable.resend_confirmation_token if confirmable.persisted?
           confirmable
         end
@@ -153,7 +153,7 @@ module Devise
           generate_token(:confirmation_token)
         end
 
-        Devise::Models.config(self, :confirm_within)
+        Devise::Models.config(self, :confirm_within, :confirmation_keys)
       end
     end
   end

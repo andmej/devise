@@ -44,10 +44,7 @@ module Devise
     module Rememberable
       extend ActiveSupport::Concern
 
-      included do
-        # Remember me option available in after_authentication hook.
-        attr_accessor :remember_me
-      end
+      attr_accessor :remember_me, :extend_remember_period
 
       # Generate a new remember token and save the record without validations
       # unless remember_across_browsers is true and the user already has a valid token.
@@ -57,12 +54,14 @@ module Devise
         save(:validate => false)
       end
 
-      # Removes the remember token only if it exists, and save the record
-      # without validations.
+      # If the record is persisted, remove the remember token (but only if
+      # it exists), and save the record without validations.
       def forget_me!
-        self.remember_token = nil if respond_to?(:remember_token)
-        self.remember_created_at = nil
-        save(:validate => false)
+        if persisted?
+          self.remember_token = nil if respond_to?(:remember_token=)
+          self.remember_created_at = nil
+          save(:validate => false)
+        end
       end
 
       # Remember token should be expired if expiration time not overpass now.

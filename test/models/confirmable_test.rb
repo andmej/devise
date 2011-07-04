@@ -51,7 +51,7 @@ class ConfirmableTest < ActiveSupport::TestCase
     assert_equal "was already confirmed, please try signing in", user.errors[:email].join
   end
 
-  test 'should find and confirm an user automatically' do
+  test 'should find and confirm a user automatically' do
     user = create_user
     confirmed_user = User.confirm_by_token(user.confirmation_token)
     assert_equal confirmed_user, user
@@ -111,12 +111,12 @@ class ConfirmableTest < ActiveSupport::TestCase
   end
 
   test 'should return a new user if no email was found' do
-    confirmation_user = User.send_confirmation_instructions(:email => "invalid@email.com")
+    confirmation_user = User.send_confirmation_instructions(:email => "invalid@example.com")
     assert_not confirmation_user.persisted?
   end
 
   test 'should add error to new user email if no email was found' do
-    confirmation_user = User.send_confirmation_instructions(:email => "invalid@email.com")
+    confirmation_user = User.send_confirmation_instructions(:email => "invalid@example.com")
     assert confirmation_user.errors[:email]
     assert_equal "not found", confirmation_user.errors[:email].join
   end
@@ -127,7 +127,7 @@ class ConfirmableTest < ActiveSupport::TestCase
       User.send_confirmation_instructions(:email => user.email)
     end
   end
-  
+
   test 'should always have confirmation token when email is sent' do
     user = new_user
     user.instance_eval { def confirmation_required?; false end }
@@ -167,10 +167,10 @@ class ConfirmableTest < ActiveSupport::TestCase
     swap Devise, :confirm_within => 1.day do
       user = new_user
       user.confirmation_sent_at = 2.days.ago
-      assert_not user.active?
+      assert_not user.active_for_authentication?
 
       Devise.confirm_within = 3.days
-      assert user.active?
+      assert user.active_for_authentication?
     end
   end
 
@@ -180,42 +180,59 @@ class ConfirmableTest < ActiveSupport::TestCase
       user = create_user
 
       user.confirmation_sent_at = 4.days.ago
-      assert user.active?
+      assert user.active_for_authentication?
 
       user.confirmation_sent_at = 5.days.ago
-      assert_not user.active?
+      assert_not user.active_for_authentication?
     end
   end
 
   test 'should be active when already confirmed' do
     user = create_user
     assert_not user.confirmed?
-    assert_not user.active?
+    assert_not user.active_for_authentication?
 
     user.confirm!
     assert user.confirmed?
-    assert user.active?
+    assert user.active_for_authentication?
   end
 
   test 'should not be active when confirm in is zero' do
     Devise.confirm_within = 0.days
     user = create_user
     user.confirmation_sent_at = Date.today
-    assert_not user.active?
+    assert_not user.active_for_authentication?
   end
 
   test 'should not be active without confirmation' do
     user = create_user
     user.confirmation_sent_at = nil
     user.save
-    assert_not user.reload.active?
+    assert_not user.reload.active_for_authentication?
   end
-  
+
   test 'should be active without confirmation when confirmation is not required' do
     user = create_user
     user.instance_eval { def confirmation_required?; false end }
     user.confirmation_sent_at = nil
     user.save
-    assert user.reload.active?
+    assert user.reload.active_for_authentication?
+  end
+
+  test 'should find a user to send email instructions for the user confirm it\'s email by authentication_keys' do
+    swap Devise, :authentication_keys => [:username, :email] do
+      user = create_user
+      confirm_user = User.send_confirmation_instructions(:email => user.email, :username => user.username)
+      assert_equal confirm_user, user
+    end
+  end
+
+  test 'should require all confirmation_keys' do
+    swap Devise, :confirmation_keys => [:username, :email] do
+      user = create_user
+      confirm_user = User.send_confirmation_instructions(:email => user.email)
+      assert_not confirm_user.persisted?
+      assert_equal "can't be blank", confirm_user.errors[:username].join
+    end
   end
 end

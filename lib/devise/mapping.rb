@@ -22,7 +22,7 @@ module Devise
   #   # is the modules included in the class
   #
   class Mapping #:nodoc:
-    attr_reader :singular, :scoped_path, :path, :controllers, :path_names, :class_name, :sign_out_via
+    attr_reader :singular, :scoped_path, :path, :controllers, :path_names, :class_name, :sign_out_via, :format
     alias :name :singular
 
     # Receives an object and find a scope for it. If a scope cannot be found,
@@ -50,7 +50,7 @@ module Devise
       @singular = (options[:singular] || @scoped_path.tr('/', '_').singularize).to_sym
 
       @class_name = (options[:class_name] || name.to_s.classify).to_s
-      @ref = ActiveSupport::Dependencies.ref(@class_name)
+      @ref = Devise.ref(@class_name)
 
       @path = (options[:path] || name).to_s
       @path_prefix = options[:path_prefix]
@@ -58,12 +58,20 @@ module Devise
       mod = options[:module] || "devise"
       @controllers = Hash.new { |h,k| h[k] = "#{mod}/#{k}" }
       @controllers.merge!(options[:controllers] || {})
+      @controllers.each { |k,v| @controllers[k] = v.to_s }
 
       @path_names = Hash.new { |h,k| h[k] = k.to_s }
       @path_names.merge!(:registration => "")
       @path_names.merge!(options[:path_names] || {})
+      
+      @constraints = Hash.new { |h,k| h[k] = k.to_s }
+      @constraints.merge!(options[:constraints] || {})
+
+      @defaults = Hash.new { |h,k| h[k] = k.to_s }
+      @defaults.merge!(options[:defaults] || {})
 
       @sign_out_via = options[:sign_out_via] || Devise.sign_out_via
+      @format = options[:format]
     end
 
     # Return modules for the mapping.
@@ -80,6 +88,10 @@ module Devise
       @strategies ||= STRATEGIES.values_at(*self.modules).compact.uniq.reverse
     end
 
+    def no_input_strategies
+      self.strategies & Devise::NO_INPUT
+    end
+
     def routes
       @routes ||= ROUTES.values_at(*self.modules).compact.uniq
     end
@@ -91,7 +103,15 @@ module Devise
     def fullpath
       "/#{@path_prefix}/#{@path}".squeeze("/")
     end
-
+    
+    def constraints
+      @constraints
+    end
+    
+    def defaults
+      @defaults
+    end
+    
     # Create magic predicates for verifying what module is activated by this map.
     # Example:
     #

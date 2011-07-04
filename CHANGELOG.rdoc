@@ -1,15 +1,126 @@
+* bug fix
+  * Properly deprecate setup_mail
+
+== 1.4.2
+
+* bug fix
+  * Improve Rails 3.1 compatibility
+  * Provide a more robust behavior to serializers and add :force_except option
+
+== 1.4.1
+
 * enhancements
-  * rails g devise:views supports slim templates (by github.com/fredwu)
+  * Add :defaults and :format support on router
+  * Add simple form generators
+  * Better localization for devise_error_messages! (by github.com/zedtux)
+
+* bug fix
+  * Ensure to_xml is properly white listened
+  * Ensure handle_unverified_request clean up any cached signed-in user
+
+== 1.4.0
+
+* enhancements
+  * Added authenticated and unauthenticated to the router to route the used based on his status (by github.com/sj26)
+  * Improve e-mail regexp (by github.com/rodrigoflores)
+  * Add strip_whitespace_keys and default to e-mail (by github.com/swrobel)
+  * Do not run format and uniqueness validations on e-mail if it hasn't changed (by github.com/Thibaut)
+  * Added update_without_password to update models but not allowing the password to change (by github.com/fschwahn)
+  * Added config.paranoid, check the generator for more information (by github.com/rodrigoflores)
+
+* bug fix
+  * password_required? should not affect length validation
+  * User cannot access sign up and similar pages if he is already signed in through a cookie or token
+  * Do not convert booleans to strings on finders (by github.com/xavier)
+  * Run validations even if current_password fails (by github.com/crx)
+  * Devise now honors routes constraints (by github.com/macmartine)
+  * Do not return the user resource when requesting instructions (by github.com/rodrigoflores)
+
+== 1.3.4
+
+* bug fix
+  * Do not add formats if html or "*/*"
+
+== 1.3.3
+
+* bug fix
+  * Explicitly mark the token as expired if so
+
+== 1.3.2
+
+* bug fix
+  * Fix another regression related to reset_password_sent_at (by github.com/alexdreher)
+
+== 1.3.1
+
+* enhancements
+  * Improve failure_app responses (by github.com/indirect)
+  * sessions/new and registrations/new also respond to xml and json now
+
+* bug fix
+  * Fix a regression that occurred if reset_password_sent_at is not present (by github.com/stevehodgkiss)
+
+== 1.3.0
+
+* enhancements
+  * All controllers can now handle different mime types than html using Responders (by github.com/sikachu)
+  * Added reset_password_within as configuration option to send the token for recovery (by github.com/jdguyot)
+  * Bump password length to 128 characters (by github.com/k33l0r)
+  * Add :only as option to devise_for (by github.com/timoschilling)
+  * Allow to override path after sending password instructions (by github.com/irohiroki)
+  * require_no_authentication has its own flash message (by github.com/jackdempsey)
+
+* bug fix
+  * Fix a bug where configuration options were being included too late
+  * Ensure Devise::TestHelpers can be used to tests Devise internal controllers (by github.com/jwilger)
+  * valid_password? should not choke on empty passwords (by github.com/mikel)
+  * Calling devise more than once does not include previously added modules anymore
+  * downcase_keys before validation
+
+* backward incompatible changes
+  * authentication_keys are no longer considered when creating the e-mail validations, the previous behavior was buggy. You must double check if you were relying on such behavior.
+
+== 1.2.1
+
+* enhancements
+  * Improve update path messages
+
+== 1.2.0
+
+* bug fix
+  * Properly ignore path prefix on omniauthable
+  * Faster uniqueness queries
+  * Rename active? to active_for_authentication? to avoid conflicts
+
+== 1.2.rc2
+
+* enhancements
+  * Make friendly_token 20 chars long
+  * Use secure_compare
 
 * bug fix
   * Fix an issue causing infinite redirects in production
   * rails g destroy works properly with devise generators (by github.com/andmej)
-  * recall options is now passed forward by hooks (by github.com/siong1987)
   * before_failure callbacks should work on test helpers (by github.com/twinge)
   * rememberable cookie now is httponly by default (by github.com/JamesFerguson)
+  * Add missing confirmation_keys (by github.com/JohnPlummer)
+  * Ensure after_* hooks are called on RegistrationsController
+  * When using database_authenticatable Devise will now only create an email field when appropriate (if using default authentication_keys or custom authentication_keys with email included)
+  * Ensure stateless token does not trigger timeout (by github.com/pixelauthority)
+  * Implement handle_unverified_request for Rails 3.0.4 compatibility and improve FailureApp reliance on symbols
+  * Consider namespaces while generating routes
+  * Custom failure apps no longer ignored in test mode (by github.com/jaghion)
+  * Do not depend on ActiveModel::Dirty
+  * Manual sign_in now triggers remember token
+  * Be sure to halt strategies on failures
+  * Consider SCRIPT_NAME on Omniauth paths
+  * Reset failed attempts when lock is expired
+  * Ensure there is no Mongoid injection
 
 * deprecations
   * Deprecated anybody_signed_in? in favor of signed_in? (by github.com/gavinhughes)
+  * Removed --haml and --slim view templates
+  * Devise::OmniAuth helpers were deprecated and removed in favor of Omniauth.config.test_mode
 
 == 1.2.rc
 
@@ -48,6 +159,20 @@
   * Fix a bug causing FailureApp to return with HTTP Auth Headers for IE7
   * Ensure namespaces has proper scoped views
   * Ensure Devise does not set empty flash messages (by github.com/sxross)
+
+== 1.1.6
+
+* Use a more secure e-mail regexp
+* Implement Rails 3.0.4 handle unverified request
+* Use secure_compare to compare passwords
+
+== 1.1.5
+
+* bugfix
+  * Ensure to convert keys on indifferent hash
+
+* defaults
+  * Set config.http_authenticatable to false to avoid confusion
 
 == 1.1.4
 

@@ -3,7 +3,7 @@ module Devise
   # and overwrite the apply_schema method.
   module Schema
 
-    # Creates email, encrypted_password and password_salt.
+    # Creates email when enabled (on by default), encrypted_password and password_salt.
     #
     # == Options
     # * :null - When true, allow columns to be null.
@@ -15,8 +15,9 @@ module Devise
     def database_authenticatable(options={})
       null    = options[:null] || false
       default = options.key?(:default) ? options[:default] : ("" if null == false)
+      include_email = !respond_to?(:authentication_keys) || self.authentication_keys.include?(:email)
 
-      apply_devise_schema :email,              String, :null => null, :default => default
+      apply_devise_schema :email,              String, :null => null, :default => default if include_email
       apply_devise_schema :encrypted_password, String, :null => null, :default => default, :limit => 128
     end
 
@@ -37,9 +38,14 @@ module Devise
       apply_devise_schema :confirmation_sent_at, DateTime
     end
 
-    # Creates reset_password_token.
-    def recoverable
+    # Creates reset_password_token and reset_password_sent_at.
+    #
+    # == Options
+    # * :reset_within - When true, adds a column that reset passwords within some date
+    def recoverable(options={})
+      use_within = options.fetch(:reset_within, Devise.reset_password_within.present?)
       apply_devise_schema :reset_password_token, String
+      apply_devise_schema :reset_password_sent_at, DateTime if use_within
     end
 
     # Creates remember_token and remember_created_at.

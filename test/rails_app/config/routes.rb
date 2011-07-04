@@ -3,6 +3,10 @@ Rails.application.routes.draw do
   resources :users, :only => [:index] do
     get :expire, :on => :member
     get :accept, :on => :member
+
+    authenticate :user do
+      post :exhibit, :on => :member
+    end
   end
 
   resources :admins, :only => [:index]
@@ -19,7 +23,7 @@ Rails.application.routes.draw do
   match "/sign_in", :to => "devise/sessions#new"
 
   # Admin scope
-  devise_for :admin, :path => "admin_area", :controllers => { :sessions => "admins/sessions" }, :skip => :passwords
+  devise_for :admin, :path => "admin_area", :controllers => { :sessions => :"admins/sessions" }, :skip => :passwords
 
   match "/admin_area/home", :to => "admins#index", :as => :admin_root
   match "/anywhere", :to => "foo#bar", :as => :new_admin_password
@@ -28,7 +32,32 @@ Rails.application.routes.draw do
     match "/private", :to => "home#private", :as => :private
   end
 
+  authenticated :admin do
+    match "/dashboard", :to => "home#admin_dashboard"
+  end
+
+  authenticated do
+    match "/dashboard", :to => "home#user_dashboard"
+  end
+
+  unauthenticated do
+    match "/join", :to => "home#join"
+  end
+
+  # Routes for constraints testing
+  devise_for :headquarters_admin, :class_name => "Admin", :path => "headquarters", :constraints => {:host => /192\.168\.1\.\d\d\d/}
+  
+  constraints(:host => /192\.168\.1\.\d\d\d/) do
+    devise_for :homebase_admin, :class_name => "Admin", :path => "homebase"
+  end
+  
+  # Routes for format=false testing
+  devise_for :htmlonly_admin, :class_name => "Admin", :skip => [:confirmations, :unlocks], :path => "htmlonly_admin", :format => false
+  devise_for :htmlonly_users, :class_name => "User", :only => [:confirmations, :unlocks], :path => "htmlonly_users", :format => false
+  
   # Other routes for routing_test.rb
+  devise_for :reader, :class_name => "User", :only => :passwords
+
   namespace :publisher, :path_names => { :sign_in => "i_dont_care", :sign_out => "get_out" } do
     devise_for :accounts, :class_name => "Admin", :path_names => { :sign_in => "get_in" }
   end
@@ -51,5 +80,6 @@ Rails.application.routes.draw do
 
   match "/set", :to => "home#set"
   match "/unauthenticated", :to => "home#unauthenticated"
+
   root :to => "home#index"
 end

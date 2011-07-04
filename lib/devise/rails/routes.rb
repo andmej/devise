@@ -4,7 +4,6 @@ module ActionDispatch::Routing
     # need devise_for mappings already declared to create filters and helpers.
     def finalize_with_devise!
       finalize_without_devise!
-      Devise.call_routes_prepare!
       Devise.configure_warden!
     end
     alias_method_chain :finalize!, :devise
@@ -100,6 +99,18 @@ module ActionDispatch::Routing
     #
     #      devise_for :users, :skip => :sessions
     #
+    #  * :only => the opposite of :skip, tell which controllers only to generate routes to:
+    #
+    #      devise_for :users, :only => :sessions
+    #
+    #  * :format => include "(.:format)" in the generated routes? true by default, set to false to disable:
+    #
+    #      devise_for :users, :format => false
+    #
+    #  * :constraints => works the same as Rails' contraints
+    #
+    #  * :defaults => works the same as Rails' defaults
+    #
     # ==== Scoping
     #
     # Following Rails 3 routes DSL, you can nest devise_for calls inside a scope:
@@ -125,9 +136,9 @@ module ActionDispatch::Routing
     #   end
     #
     # ==== Adding custom actions to override controllers
-    # 
-    # You can pass a block to devise_for that will add any routes defined in the block to Devise's 
-    # list of known actions.  This is important if you add a custom action to a controller that 
+    #
+    # You can pass a block to devise_for that will add any routes defined in the block to Devise's
+    # list of known actions.  This is important if you add a custom action to a controller that
     # overrides an out of the box Devise controller.
     # For example:
     #
@@ -155,6 +166,10 @@ module ActionDispatch::Routing
       options[:module]      ||= @scope[:module] if @scope[:module].present?
       options[:path_prefix] ||= @scope[:path]   if @scope[:path].present?
       options[:path_names]    = (@scope[:path_names] || {}).merge(options[:path_names] || {})
+      options[:constraints]   = (@scope[:constraints] || {}).merge(options[:constraints] || {})
+      options[:defaults]      = (@scope[:defaults] || {}).merge(options[:defaults] || {})
+
+      @scope[:options]        = (@scope[:options] || {}).merge({:format => false}) if options[:format] == false
 
       resources.map!(&:to_sym)
 
@@ -174,11 +189,14 @@ module ActionDispatch::Routing
         end
 
         routes  = mapping.routes
+        if options.has_key?(:only)
+          routes  = Array(options.delete(:only)).map { |s| s.to_s.singularize.to_sym } & mapping.routes
+        end
         routes -= Array(options.delete(:skip)).map { |s| s.to_s.singularize.to_sym }
 
         devise_scope mapping.name do
           yield if block_given?
-          with_devise_exclusive_scope mapping.fullpath, mapping.name do
+          with_devise_exclusive_scope mapping.fullpath, mapping.name, mapping.constraints, mapping.defaults do
             routes.each { |mod| send("devise_#{mod}", mapping, mapping.controllers) }
           end
         end
@@ -194,6 +212,50 @@ module ActionDispatch::Routing
     def authenticate(scope)
       constraint = lambda do |request|
         request.env["warden"].authenticate!(:scope => scope)
+      end
+
+      constraints(constraint) do
+        yield
+      end
+    end
+
+    # Allow you to route based on whether a scope is authenticated. You
+    # can optionally specify which scope.
+    #
+    #   authenticated :admin do
+    #     root :to => 'admin/dashboard#show'
+    #   end
+    #
+    #   authenticated do
+    #     root :to => 'dashboard#show'
+    #   end
+    #
+    #   root :to => 'landing#show'
+    #
+    def authenticated(scope=nil)
+      constraint = lambda do |request|
+        request.env["warden"].authenticate? :scope => scope
+      end
+
+      constraints(constraint) do
+        yield
+      end
+    end
+
+    # Allow you to route based on whether a scope is *not* authenticated.
+    # You can optionally specify which scope.
+    #
+    #   unauthenticated do
+    #     as :user do
+    #       root :to => 'devise/registrations#new'
+    #     end
+    #   end
+    #
+    #   root :to => 'dashboard#show'
+    #
+    def unauthenticated(scope=nil)
+      constraint = lambda do |request|
+        not request.env["warden"].authenticate? :scope => scope
       end
 
       constraints(constraint) do
@@ -264,7 +326,8 @@ module ActionDispatch::Routing
       end
 
       def devise_omniauth_callback(mapping, controllers) #:nodoc:
-        path_prefix = "/#{mapping.path}/auth"
+        path, @scope[:path] = @scope[:path], nil
+        path_prefix = "/#{mapping.path}/auth".squeeze("/")
 
         if ::OmniAuth.config.path_prefix && ::OmniAuth.config.path_prefix != path_prefix
           warn "[DEVISE] You can only add :omniauthable behavior to one model."
@@ -272,21 +335,23 @@ module ActionDispatch::Routing
           ::OmniAuth.config.path_prefix = path_prefix
         end
 
-        match "/auth/:action/callback", :action => Regexp.union(mapping.to.omniauth_providers.map(&:to_s)),
+        match "#{path_prefix}/:action/callback", :action => Regexp.union(mapping.to.omniauth_providers.map(&:to_s)),
           :to => controllers[:omniauth_callbacks], :as => :omniauth_callback
+      ensure
+        @scope[:path] = path
       end
 
-      def with_devise_exclusive_scope(new_path, new_as) #:nodoc:
-        old_as, old_path, old_module = @scope[:as], @scope[:path], @scope[:module]
-        @scope[:as], @scope[:path], @scope[:module] = new_as, new_path, nil
+      def with_devise_exclusive_scope(new_path, new_as, new_constraints, new_defaults) #:nodoc:
+        old_as, old_path, old_module, old_constraints, old_defaults = @scope[:as], @scope[:path], @scope[:module], @scope[:constraints], @scope[:defaults]
+        @scope[:as], @scope[:path], @scope[:module], @scope[:constraints], @scope[:defaults] = new_as, new_path, nil, new_constraints, new_defaults
         yield
       ensure
-        @scope[:as], @scope[:path], @scope[:module] = old_as, old_path, old_module
+        @scope[:as], @scope[:path], @scope[:module], @scope[:constraints], @scope[:defaults] = old_as, old_path, old_module, old_constraints, old_defaults
       end
 
       def raise_no_devise_method_error!(klass) #:nodoc:
-        raise "#{klass} does not respond to 'devise' method. This usually means you haven't " <<
-          "loaded your ORM file or it's being loaded too late. To fix it, be sure to require 'devise/orm/YOUR_ORM' " <<
+        raise "#{klass} does not respond to 'devise' method. This usually means you haven't " \
+          "loaded your ORM file or it's being loaded too late. To fix it, be sure to require 'devise/orm/YOUR_ORM' " \
           "inside 'config/initializers/devise.rb' or before your application definition in 'config/application.rb'"
       end
   end
